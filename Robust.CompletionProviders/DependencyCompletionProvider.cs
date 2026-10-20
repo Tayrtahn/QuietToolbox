@@ -5,6 +5,12 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Robust.CompletionProviders;
 
+/// <summary>
+/// Provides completion suggestions when typing a new [Dependency] field.
+/// Suggestion is provided after the Type has been specified, <c>[Dependency] private IEntityManager _</c>.
+/// The completion automatically provides a name for the field and sets the value to <see langword="default"/>
+/// with null suppression if needed.
+/// </summary>
 [ExportCompletionProvider(nameof(DependencyCompletionProvider), LanguageNames.CSharp)]
 public sealed class DependencyCompletionProvider : CompletionProvider
 {
@@ -26,13 +32,16 @@ public sealed class DependencyCompletionProvider : CompletionProvider
         if (memberSyntax is null || memberSyntax.Type is null)
             return;
 
-        var spaceCount = memberSyntax.ToString().Count(c => c == ' ');
-        if (spaceCount < 2)
+        // Don't offer completion until the user specifies private/public.
+        // This prevents showing suggestions too early, like
+        // "[Dependency] priva" -> "[Dependency] _priva = default!".
+        if (memberSyntax.Modifiers.Count < 1)
             return;
 
         if (!HasDependencyAttribute(memberSyntax))
             return;
 
+        // Private fields have a different expected name format.
         var isPrivate = memberSyntax.Modifiers.Any(SyntaxKind.PrivateKeyword);
 
         var fieldName = GetDependencyFieldName(memberSyntax.Type, isPrivate);
@@ -51,7 +60,6 @@ public sealed class DependencyCompletionProvider : CompletionProvider
         );
 
         context.AddItem(completion);
-        //context.IsExclusive = true;
     }
 
     private static bool HasDependencyAttribute(IncompleteMemberSyntax node)
