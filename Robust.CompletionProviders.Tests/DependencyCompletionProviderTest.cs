@@ -1,0 +1,57 @@
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using NUnit.Framework;
+
+namespace Robust.CompletionProviders.Tests;
+
+[Parallelizable(ParallelScope.All)]
+public sealed class DependencyCompletionProviderTest
+{
+    private static async Task Verifier(string source, List<string> expected)
+    {
+        var test = new CompletionProviderTest<DependencyCompletionProvider>()
+        {
+            TestState =
+            {
+                Sources = { source }
+            },
+            ExpectedSuggestions = expected
+        };
+
+        await test.RunAsync();
+    }
+
+    [Test]
+    [TestCase("private", "IMyDependency", "_myDependency = default!;")]
+    [TestCase("private", "InconvenientlyNamedThing", "_inconvenientlyNamedThing = default!;")]
+    [TestCase("private", "MyDependencySystem", "_myDependency = default!;")]
+    [TestCase("private", "SharedMyDependencySystem", "_myDependency = default!;")]
+    [TestCase("private", "ISharedMyDependencyManager", "_myDependencyManager = default!;")]
+    [TestCase("private", "IEntityManager", "_entMan = default!;")]
+    [TestCase("private", "IPrototypeManager", "_protoMan = default!;")]
+    [TestCase("private", "SharedTransformSystem", "_xform = default!;")]
+    [TestCase("private", "EntityQuery<ThingComponent>", "_thingQuery = default;")]
+    //
+    [TestCase("protected", "IMyDependency", "MyDependency = default!;")]
+    [TestCase("protected", "InconvenientlyNamedThing", "InconvenientlyNamedThing = default!;")]
+    [TestCase("protected", "MyDependencySystem", "MyDependency = default!;")]
+    [TestCase("protected", "SharedMyDependencySystem", "MyDependency = default!;")]
+    [TestCase("protected", "ISharedMyDependencyManager", "MyDependencyManager = default!;")]
+    [TestCase("protected", "IEntityManager", "EntMan = default!;")]
+    [TestCase("protected", "IPrototypeManager", "ProtoMan = default!;")]
+    [TestCase("protected", "SharedTransformSystem", "Xform = default!;")]
+    [TestCase("protected", "EntityQuery<ThingComponent>", "ThingQuery = default;")]
+    public async Task VerifyDependency(string accessMod, string typeName, string expected)
+    {
+        string source = $$"""
+            public struct EntityQuery<T> { }
+
+            public class Foo
+            {
+                [Dependency] {{accessMod}} {{typeName}} $$
+            }
+        """;
+
+        await Verifier(source, [expected]);
+    }
+}
