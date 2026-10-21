@@ -44,6 +44,11 @@ public sealed class CompletionProviderTest<T> where T : CompletionProvider
     /// </summary>
     public List<string> ExpectedSuggestions { get; init; } = [];
 
+    /// <summary>
+    /// If true, the suggestions must exactly match <see cref="ExpectedSuggestions"/>.
+    /// If false, the suggestions only need to <i>include</i> <see cref="ExpectedSuggestions"/> (allowing default suggestions).
+    /// </summary>
+    /// <seealso cref="CompletionContext.IsExclusive"/>
     public bool IsExclusive;
 
     /// <summary>
