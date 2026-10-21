@@ -95,6 +95,11 @@ public sealed class DependencyCompletionProvider : CompletionProvider
         context.AddItem(completion);
     }
 
+    public override async Task<CompletionDescription?> GetDescriptionAsync(Document document, CompletionItem item, CancellationToken cancellationToken)
+    {
+        return CompletionDescription.FromText("(Auto-complete dependency field)");
+    }
+
     /// <summary>
     /// Checks if <paramref name="node"/> has the [Dependency] attribute.
     /// </summary>
