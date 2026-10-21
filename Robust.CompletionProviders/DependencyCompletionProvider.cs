@@ -14,6 +14,24 @@ namespace Robust.CompletionProviders;
 [ExportCompletionProvider(nameof(DependencyCompletionProvider), LanguageNames.CSharp)]
 public sealed class DependencyCompletionProvider : CompletionProvider
 {
+    /// <summary>
+    /// Mapping of special cases of name suggestions for specific types.
+    /// Key is the triggering typename without the leading 'I' for interfaces or any side prefix (like 'Shared' or 'Server').
+    /// Value is the resulting name suggestion, formatted as public/protected field name (PascalCase rather than _privateField).
+    /// </summary>
+    private static readonly Dictionary<string, string> SpecialNameMappings = new()
+    {
+        {"EntityManager", "EntMan"},
+        {"PrototypeManager", "ProtoMan"},
+        {"TransformSystem", "Xform"},
+    };
+
+    private const string DependencyAttributeName = "Dependency";
+    private const string EntityQueryName = "EntityQuery";
+    private const string ComponentSuffix = "Component";
+    private const string SystemSuffix = "System";
+    private readonly static string[] SidePrefixes = ["Shared", "Server", "Client"];
+
     public override async Task ProvideCompletionsAsync(CompletionContext context)
     {
         var document = context.Document;
@@ -25,31 +43,43 @@ public sealed class DependencyCompletionProvider : CompletionProvider
         if (root is null)
             return;
 
+        // Get the syntax token at the cursor position.
         var token = root.FindToken(context.Position);
 
+        // Since the user is still typing the line, we don't know if it's a field, property, method, or whatever.
+        // So we get the incomplete syntax and deduce what we can.
         var memberSyntax = token.Parent?.AncestorsAndSelf().OfType<IncompleteMemberSyntax>().FirstOrDefault();
 
-        if (memberSyntax is null || memberSyntax.Type is null)
+        // If the cursor isn't in some other sort of code, memberSyntax will be null.
+        // If they've typed 'private' but not the field type yet, memberSyntax.Type will be null.
+        if (memberSyntax?.Type is null)
             return;
 
-        // Don't offer completion until the user specifies private/public.
+        // Don't offer completions until the user specifies private/public.
         // This prevents showing suggestions too early, like
         // "[Dependency] priva" -> "[Dependency] _priva = default!".
         if (memberSyntax.Modifiers.Count < 1)
             return;
 
+        // We only want to offer completions on [Dependency] fields.
         if (!HasDependencyAttribute(memberSyntax))
             return;
 
         // Private fields have a different expected name format.
         var isPrivate = memberSyntax.Modifiers.Any(SyntaxKind.PrivateKeyword);
 
+        // Get the suggested field name.
         var fieldName = GetDependencyFieldName(memberSyntax.Type, isPrivate);
 
+        // Look up the symbol for the field's Type.
+        // We don't do this earlier because it's fairly expensive.
         var model = await document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
         var typeSymbol = model?.GetSymbolInfo(memberSyntax.Type).Symbol as ITypeSymbol;
+
+        // Evaluate the type to see if we need to add null supression (!) to the assignment.
         var nullSuppression = DefaultNeedsNullSuppression(typeSymbol) ? "!" : "";
 
+        // Construct the final text of the suggestion.
         var suggestion = $"{fieldName} = default{nullSuppression};";
 
         var completion = CompletionItem.Create(
@@ -62,19 +92,29 @@ public sealed class DependencyCompletionProvider : CompletionProvider
         context.AddItem(completion);
     }
 
+    /// <summary>
+    /// Checks if <paramref name="node"/> has the [Dependency] attribute.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> if <paramref name="node"/> has the [Dependency] attribute, otherwise <see langword="false"/>.
+    /// </returns>
     private static bool HasDependencyAttribute(IncompleteMemberSyntax node)
     {
         foreach (var attrList in node.AttributeLists)
         {
             foreach (var attr in attrList.Attributes)
             {
-                if (attr.Name.ToString() == "Dependency")
+                if (attr.Name.ToString() == DependencyAttributeName)
                     return true;
             }
         }
         return false;
     }
 
+    /// <summary>
+    /// Checks whether a field of the specified type needs nullable suppression (!) in order to assign <see langword="null"/> to it.
+    /// </summary>
+    /// <returns><see langword="true"/> if the assignment requires nullable suppression, otherwise <see langword="false"/>.</returns>
     private static bool DefaultNeedsNullSuppression(ITypeSymbol? typeSymbol)
     {
         if (typeSymbol is null)
@@ -83,28 +123,32 @@ public sealed class DependencyCompletionProvider : CompletionProvider
         return typeSymbol.IsReferenceType;
     }
 
-    private static readonly Dictionary<string, string> SpecialNameMappings = new()
-    {
-        {"EntityManager", "EntMan"},
-        {"PrototypeManager", "ProtoMan"},
-        {"TransformSystem", "Xform"},
-    };
-
+    /// <summary>
+    /// Generates a suggested name for a dependency field of the specified type.
+    /// </summary>
+    /// <param name="typeSyntax">The Type of the dependency field.</param>
+    /// <param name="isPrivate">
+    ///     Whether the field should be named in the style of <see langword="private"/> fields
+    ///     (leading underscore and lowercase letter).
+    /// </param>
+    /// <returns>The suggested name.</returns>
+    /// <seealso cref="SpecialNameMappings"/>
     private static string GetDependencyFieldName(TypeSyntax typeSyntax, bool isPrivate)
     {
-        var typeName = typeSyntax.ToString();
+        // If the type has a nullable annotation (?), remove it.
+        if (typeSyntax is NullableTypeSyntax nullableSyntax)
+            typeSyntax = nullableSyntax.ElementType;
 
+        string typeName;
         // Special case for EntityQuery - transform "EntityQuery<MyThingComponent>" to "MyThingQuery".
-        if (typeName.StartsWith("EntityQuery<"))
+        if (typeSyntax is GenericNameSyntax genericSyntax
+            && genericSyntax.Identifier.ToString() == EntityQueryName)
         {
-            // Get the substring containing the name of the component the query is for.
-            var compName = typeName.Substring("EntityQuery<".Length, typeName.Length - "EntityQuery<".Length - 1);
-
-            // Remove trailing "Component" from component name.
-            if (compName.EndsWith("Component"))
-                compName = compName.Substring(0, compName.Length - "Component".Length);
-
-            typeName = $"{compName}Query";
+            typeName = GetEntityQueryFieldName(genericSyntax);
+        }
+        else
+        {
+            typeName = typeSyntax.ToString();
         }
 
         // Remove leading 'I' from interface names.
@@ -112,7 +156,7 @@ public sealed class DependencyCompletionProvider : CompletionProvider
             typeName = typeName.Substring(1);
 
         // Remove leading side prefixes.
-        foreach (var prefix in new string[] {"Shared", "Server", "Client"})
+        foreach (var prefix in SidePrefixes)
         {
             if (typeName.StartsWith(prefix))
                 typeName = typeName.Substring(prefix.Length);
@@ -123,8 +167,8 @@ public sealed class DependencyCompletionProvider : CompletionProvider
             typeName = special;
 
         // Remove trailing 'System' from EntitySystem names.
-        if (typeName.EndsWith("System"))
-            typeName = typeName.Substring(0, typeName.Length - "System".Length);
+        if (typeName.EndsWith(SystemSuffix))
+            typeName = typeName.Substring(0, typeName.Length - SystemSuffix.Length);
 
         if (isPrivate)
         {
@@ -135,5 +179,26 @@ public sealed class DependencyCompletionProvider : CompletionProvider
         {
             return typeName;
         }
+    }
+
+    /// <summary>
+    /// Generates a suggested name for a dependency field with an EntityQuery type.
+    /// </summary>
+    /// <remarks>
+    /// The name is generated by removing "Component" from the component type name and adding "Query".
+    /// </remarks>
+    /// <example>
+    ///     EntityQuery<SomeThingComponent> -> SomeThingQuery
+    /// </example>
+    /// <returns>The suggested name.</returns>
+    private static string GetEntityQueryFieldName(GenericNameSyntax genericSyntax)
+    {
+        var compName = genericSyntax.TypeArgumentList.Arguments[0].ToString();
+
+        // Remove trailing "Component" from component name.
+        if (compName.EndsWith(ComponentSuffix))
+            compName = compName.Substring(0, compName.Length - ComponentSuffix.Length);
+
+        return $"{compName}Query";
     }
 }
