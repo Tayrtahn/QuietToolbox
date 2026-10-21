@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Completion;
 using Microsoft.CodeAnalysis.CSharp;
@@ -68,10 +69,11 @@ public sealed class DependencyCompletionProvider : CompletionProvider
             return;
 
         // Private fields have a different expected name format.
-        var isPrivate = memberSyntax.Modifiers.Any(SyntaxKind.PrivateKeyword);
+        if (!TryGetAccessiblityModifier(memberSyntax, out var fieldAccessibility))
+            return;
 
         // Get the suggested field name.
-        var fieldName = GetDependencyFieldName(memberSyntax.Type, isPrivate);
+        var fieldName = GetDependencyFieldName(memberSyntax.Type, fieldAccessibility.Value);
 
         // Look up the symbol for the field's Type.
         // We don't do this earlier because it's fairly expensive.
@@ -93,6 +95,40 @@ public sealed class DependencyCompletionProvider : CompletionProvider
         );
 
         context.AddItem(completion);
+    }
+
+    /// <summary>
+    /// Attempts to get the accessibility modifier (private, protected, etc.) of a syntax node.
+    /// </summary>
+    /// <remarks>
+    /// Because this uses syntax instead of semantic analysis, it only detects explicit modifiers.
+    /// Implicit modifiers will not be found.
+    /// </remarks>
+    private static bool TryGetAccessiblityModifier(MemberDeclarationSyntax node, [NotNullWhen(true)] out Accessibility? accessibility)
+    {
+        if (node.Modifiers.Any(SyntaxKind.PublicKeyword))
+        {
+            accessibility = Accessibility.Public;
+            return true;
+        }
+        if (node.Modifiers.Any(SyntaxKind.ProtectedKeyword))
+        {
+            accessibility = Accessibility.Protected;
+            return true;
+        }
+        if (node.Modifiers.Any(SyntaxKind.PrivateKeyword))
+        {
+            accessibility = Accessibility.Private;
+            return true;
+        }
+        if (node.Modifiers.Any(SyntaxKind.InternalKeyword))
+        {
+            accessibility = Accessibility.Internal;
+            return true;
+        }
+
+        accessibility = null;
+        return false;
     }
 
     public override async Task<CompletionDescription?> GetDescriptionAsync(Document document, CompletionItem item, CancellationToken cancellationToken)
@@ -136,12 +172,12 @@ public sealed class DependencyCompletionProvider : CompletionProvider
     /// </summary>
     /// <param name="typeSyntax">The Type of the dependency field.</param>
     /// <param name="isPrivate">
-    ///     Whether the field should be named in the style of <see langword="private"/> fields
-    ///     (leading underscore and lowercase letter).
+    ///     The accessiblity of the field, such as private or protected.
+    ///     Determines the format of the returned name.
     /// </param>
     /// <returns>The suggested name.</returns>
     /// <seealso cref="SpecialNameMappings"/>
-    private static string GetDependencyFieldName(TypeSyntax typeSyntax, bool isPrivate)
+    private static string GetDependencyFieldName(TypeSyntax typeSyntax, Accessibility accessibility)
     {
         // If the type has a nullable annotation (?), remove it.
         if (typeSyntax is NullableTypeSyntax nullableSyntax)
@@ -178,15 +214,13 @@ public sealed class DependencyCompletionProvider : CompletionProvider
         if (typeName.EndsWith(SystemSuffix))
             typeName = typeName.Substring(0, typeName.Length - SystemSuffix.Length);
 
-        if (isPrivate)
+        return accessibility switch
         {
             // Add leading '_' and change first letter to lowercase.
-            return $"_{char.ToLowerInvariant(typeName[0])}{typeName.Substring(1)}";
-        }
-        else
-        {
-            return typeName;
-        }
+            Accessibility.Private or Accessibility.Internal => $"_{char.ToLowerInvariant(typeName[0])}{typeName.Substring(1)}",
+            // Just use the name.
+            _ => typeName,
+        };
     }
 
     /// <summary>
