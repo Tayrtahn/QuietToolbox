@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Completion;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Tags;
 
 namespace Robust.CompletionProviders;
 
@@ -87,7 +88,8 @@ public sealed class DependencyCompletionProvider : CompletionProvider
             suggestion,
             suggestion,
             suggestion,
-            rules: CompletionItemRules.Default.WithMatchPriority(MatchPriority.Preselect)
+            rules: CompletionItemRules.Default.WithMatchPriority(MatchPriority.Preselect),
+            tags: [WellKnownTags.Snippet]
         );
 
         context.AddItem(completion);
