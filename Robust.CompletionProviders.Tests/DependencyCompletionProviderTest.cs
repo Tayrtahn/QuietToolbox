@@ -30,7 +30,8 @@ public sealed class DependencyCompletionProviderTest
     [TestCase("private", "ISharedMyDependencyManager", "_myDependencyManager = default!;")]
     [TestCase("private", "IEntityManager", "_entMan = default!;")]
     [TestCase("private", "IPrototypeManager", "_protoMan = default!;")]
-    [TestCase("private", "SharedTransformSystem", "_xform = default!;")]
+    [TestCase("private", "IConfigurationManager", "_cfg = default!;")]
+    [TestCase("private", "IGameTiming", "_timing = default!;")]
     [TestCase("private", "EntityQuery<ThingComponent>", "_thingQuery = default;")]
     [TestCase("private", "INullableDependency?", "_nullableDependency = default;")]
     // Protected
@@ -41,7 +42,8 @@ public sealed class DependencyCompletionProviderTest
     [TestCase("protected", "ISharedMyDependencyManager", "MyDependencyManager = default!;")]
     [TestCase("protected", "IEntityManager", "EntMan = default!;")]
     [TestCase("protected", "IPrototypeManager", "ProtoMan = default!;")]
-    [TestCase("protected", "SharedTransformSystem", "Xform = default!;")]
+    [TestCase("protected", "IConfigurationManager", "Cfg = default!;")]
+    [TestCase("protected", "IGameTiming", "Timing = default!;")]
     [TestCase("protected", "EntityQuery<ThingComponent>", "ThingQuery = default;")]
     [TestCase("protected", "INullableDependency?", "NullableDependency = default;")]
     public async Task VerifyDependency(string accessMod, string typeName, string expected)

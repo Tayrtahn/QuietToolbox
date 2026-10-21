@@ -23,7 +23,8 @@ public sealed class DependencyCompletionProvider : CompletionProvider
     {
         {"EntityManager", "EntMan"},
         {"PrototypeManager", "ProtoMan"},
-        {"TransformSystem", "Xform"},
+        {"ConfigurationManager", "Cfg"},
+        {"GameTiming", "Timing"},
     };
 
     private const string DependencyAttributeName = "Dependency";
