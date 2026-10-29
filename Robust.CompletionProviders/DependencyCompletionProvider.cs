@@ -28,6 +28,7 @@ public sealed class DependencyCompletionProvider : CompletionProvider
         {"PrototypeManager", "ProtoMan"},
         {"ConfigurationManager", "Cfg"},
         {"GameTiming", "Timing"},
+        {"RobustRandom", "Random"},
     };
 
     private const string DependencyAttributeName = "Dependency";
