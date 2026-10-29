@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Completion;
@@ -86,10 +87,13 @@ public sealed class DependencyCompletionProvider : CompletionProvider
         // Construct the final text of the suggestion.
         var suggestion = $"{fieldName} = default{nullSuppression};";
 
+        var properties = ImmutableDictionary<string, string>.Empty.Add("Provider", nameof(DependencyCompletionProvider));
+
         var completion = CompletionItem.Create(
             suggestion,
             suggestion,
             suggestion,
+            properties: properties,
             rules: CompletionItemRules.Default.WithMatchPriority(MatchPriority.Preselect),
             tags: [WellKnownTags.Snippet]
         );

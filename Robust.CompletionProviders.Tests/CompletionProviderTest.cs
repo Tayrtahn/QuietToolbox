@@ -22,8 +22,12 @@ namespace Robust.CompletionProviders.Tests;
 /// functionality of the <see cref="CompletionProvider"/>.
 /// Changes to the document text can be verified by providing <see cref="ExpectedResults"/>.
 /// </summary>
+/// <remarks>
+/// In order to filter for completions from the tested provider, provided completions must have an entry
+/// in their Properties dictionary with the key "Provider" and a value matching nameof(T).
+/// </remarks>
 /// <typeparam name="T">The <see cref="CompletionProvider"/> being tested.</typeparam>
-public sealed class CompletionProviderTest<T> where T : CompletionProvider
+public sealed class CompletionProviderTest<T> where T : CompletionProvider, new()
 {
     /// <summary>
     /// This character sequence should appear in the input source exactly once to indicate
@@ -43,13 +47,6 @@ public sealed class CompletionProviderTest<T> where T : CompletionProvider
     /// The display names of the suggestions that should be generated.
     /// </summary>
     public List<string> ExpectedSuggestions { get; init; } = [];
-
-    /// <summary>
-    /// If true, the suggestions must exactly match <see cref="ExpectedSuggestions"/>.
-    /// If false, the suggestions only need to <i>include</i> <see cref="ExpectedSuggestions"/> (allowing default suggestions).
-    /// </summary>
-    /// <seealso cref="CompletionContext.IsExclusive"/>
-    public bool IsExclusive;
 
     /// <summary>
     /// A mapping of suggestion display names to the expected altered source text after applying them.
@@ -145,13 +142,13 @@ public sealed class CompletionProviderTest<T> where T : CompletionProvider
         // Get the code completion suggestions that would be given with the cursor at the position marker.
         var suggestions = await completionService!.GetCompletionsAsync(document, cursorPosition);
 
-        var names = suggestions.ItemsList.Select(item => item.DisplayText);
+        // Filter to just suggestions from our tested provider.
+        var filteredSuggestions = suggestions.ItemsList.Where(item => item.Properties.TryGetValue("Provider", out var provider) && provider == typeof(T).Name);
+
+        var names = filteredSuggestions.Select(item => item.DisplayText);
 
         // Verify that the suggested names are what the test expects.
-        if (IsExclusive)
-            Assert.That(names, Is.EquivalentTo(ExpectedSuggestions));
-        else
-            Assert.That(names, Is.SupersetOf(ExpectedSuggestions));
+        Assert.That(names, Is.EquivalentTo(ExpectedSuggestions));
 
         // If we're not testing how the document is changed by applying any suggestions, we're done.
         if (ExpectedResults is null)
@@ -160,7 +157,7 @@ public sealed class CompletionProviderTest<T> where T : CompletionProvider
         foreach (var (itemName, result) in ExpectedResults)
         {
             // Find the completion suggestion matching the name given by the test.
-            var item = suggestions.ItemsList.First(item => item.DisplayText == itemName);
+            var item = filteredSuggestions.First(item => item.DisplayText == itemName);
 
             // Apply the change to the text of the document.
             var change = await completionService.GetChangeAsync(document, item);

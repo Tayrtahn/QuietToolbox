@@ -59,8 +59,26 @@ public sealed class DependencyCompletionProviderTest
             {
                 [Dependency] {{accessMod}} {{typeName}} $$
             }
-        """;
+            """;
 
         await Verifier(source, [expected]);
+    }
+
+    [Test]
+    [TestCase("private $$")]
+    [TestCase("private IMyThing $$")]
+    [TestCase("[Dependency] priv$$")]
+    [TestCase("[Dependency] private $$")]
+    [TestCase("[Dependency] private IMyThing _foo $$")]
+    public async Task VerifyIgnored(string line)
+    {
+        string source = $$"""
+            public class Foo
+            {
+                {{line}}
+            }
+        """;
+
+        await Verifier(source, []);
     }
 }
